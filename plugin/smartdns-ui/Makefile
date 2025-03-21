@@ -19,6 +19,7 @@ PREFIX := /usr
 SBINDIR := $(PREFIX)/sbin
 SLIBDIR := $(PREFIX)/lib
 DESTDIR :=
+BUILD_ARCH ?=
 SMARTDNS_SRC_DIR=../../src
 
 ifdef DEBUG
@@ -39,7 +40,7 @@ test-prepare:
 	$(MAKE) -C $(SMARTDNS_SRC_DIR) libsmartdns-test.a
 
 $(BIN):
-	MAKEFLAGS= cargo build $(CARGO_BUILD_TYPE) --features "build-release"
+	MAKEFLAGS= cargo build $(CARGO_BUILD_TYPE) $(if $(strip $(BUILD_ARCH)),--target $(BUILD_ARCH)) --features "build-release"
 	cp $(CARGO_BUILD_PATH)/libsmartdns_ui.so target/ 
 
 install: $(BIN)

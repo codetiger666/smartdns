@@ -6,13 +6,14 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=smartdns
-PKG_VERSION:=1.2023.41
+PKG_VERSION:=Release46.1
 PKG_RELEASE:=1
 
 PKG_SOURCE_PROTO:=git
-PKG_SOURCE_URL:=https://www.github.com/pymumu/smartdns.git
+PKG_SOURCE_URL:=https://github.com/codetiger666/smartdns.git
 PKG_MIRROR_HASH:=skip
-PKG_SOURCE_VERSION:=60a3719ec739be2cc1e11724ac049b09a75059cb
+PKG_BUILD_DEPENDS:=rust/host node/host
+PKG_SOURCE_VERSION:=968c3f7e619d15e44cec840f07992e87af41cfdd
 
 PKG_MAINTAINER:=Nick Peng <pymumu@gmail.com>
 PKG_LICENSE:=GPL-3.0-or-later
@@ -23,7 +24,12 @@ PKG_BUILD_PARALLEL:=1
 include $(INCLUDE_DIR)/package.mk
 
 MAKE_VARS += VER=$(PKG_VERSION) 
-MAKE_PATH:=src
+MAKE_VARS += WITH_UI=1
+MAKE_VARS += BUILD_ARCH=$(ARCH)-unknown-linux-musl
+MAKE_PATH :=
+CLANG_VERSION=llvmorg-20.1.1
+LIB_CLANG_EXISTS := $(shell ldconfig -p | grep -q libclang.so && echo "yes" || echo "no")
+
 
 define Package/smartdns
   SECTION:=net
@@ -48,11 +54,27 @@ define Package/smartdns/conffiles
 /etc/smartdns/domain-forwarding.list
 endef
 
+define Build/Compile
+	if [ "$(LIB_CLANG_EXISTS)" = "no" ]; then \
+		git clone https://github.com/llvm/llvm-project.git -b $(CLANG_VERSION) --dept=1 $(PKG_BUILD_DIR)/llvm &&\
+		(cd $(PKG_BUILD_DIR)/llvm && cmake -S llvm -B build -G "Unix Makefiles" \
+		-DLLVM_ENABLE_PROJECTS="clang" \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DCMAKE_INSTALL_PREFIX=$(STAGING_DIR_HOSTPKG)/usr \
+		&& cd build && make -j8 && make install) \
+	fi
+	$(call Build/Compile/Default)
+	git clone https://github.com/pymumu/smartdns-webui.git --dept=1 $(PKG_BUILD_DIR)/webui &&\
+	(cd $(PKG_BUILD_DIR)/webui && npm install && npm run build)
+endef
+
 define Package/smartdns/install
 	$(INSTALL_DIR) $(1)/usr/sbin $(1)/etc/config $(1)/etc/init.d 
-	$(INSTALL_DIR) $(1)/etc/smartdns $(1)/etc/smartdns/domain-set $(1)/etc/smartdns/conf.d/
+	$(INSTALL_DIR) $(1)/etc/smartdns $(1)/etc/smartdns/domain-set $(1)/etc/smartdns/conf.d/ $(1)/etc/smartdns/www/
 	$(INSTALL_DIR) $(1)/etc/smartdns/ip-set $(1)/etc/smartdns/download
 	$(INSTALL_BIN) $(PKG_BUILD_DIR)/src/smartdns $(1)/usr/sbin/smartdns
+	cp -ra $(PKG_BUILD_DIR)/webui/out/* $(1)/etc/smartdns/www/
+	$(INSTALL_BIN) $(PKG_BUILD_DIR)/plugin/smartdns-ui/target/libsmartdns_ui.so $(1)/etc/smartdns/libsmartdns_ui.so
 	$(INSTALL_BIN) $(PKG_BUILD_DIR)/package/openwrt/files/etc/init.d/smartdns $(1)/etc/init.d/smartdns
 	$(INSTALL_CONF) $(PKG_BUILD_DIR)/package/openwrt/address.conf $(1)/etc/smartdns/address.conf
 	$(INSTALL_CONF) $(PKG_BUILD_DIR)/package/openwrt/blacklist-ip.conf $(1)/etc/smartdns/blacklist-ip.conf
